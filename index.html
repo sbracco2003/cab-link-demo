@@ -284,7 +284,7 @@
   .rt-tip { font-weight: 650; font-size: 12px; }
 
   /* Below this width there isn't room for both, so the panel goes back to
-     floating over the map and the toggle moves clear of the layer control. */
+     floating over the map and the toggle moves to the map's top-right corner. */
   @media (max-width: 720px) {
     #panel {
       position: fixed; top: 0; left: 0; bottom: 0; margin-left: 0;
@@ -293,7 +293,7 @@
     }
     #panel.collapsed { margin-left: 0; transform: translateX(-100%); }
     #map { flex: 1 1 100%; }
-    #toggle { left: auto; right: 12px; top: 58px; }
+    #toggle { left: auto; right: 12px; top: 12px; }
     #panel.collapsed ~ #toggle { left: auto; right: 12px; }
   }
 </style>
@@ -392,46 +392,24 @@ const map = L.map('map', { zoomControl: false, preferCanvas: true, zoomSnap: 0.2
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 L.control.scale({ imperial: true, metric: false, position: 'bottomleft' }).addTo(map);
 
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+/* OpenStreetMap is the only basemap. This page used to default to CARTO's
+   "light_all" tiles (with OSM as a switcher/fallback option), but CARTO now
+   requires an API key for those tiles: instead of failing, its servers
+   return a normal 200 image with an "API KEY REQUIRED" watermark tiled over
+   the whole map -- so the tileerror-based auto-fallback that used to live
+   here never fired (nothing "failed"), and every viewer got a watermarked
+   map. Since this page has to keep working for anyone who opens the link
+   with no keys or accounts, CARTO, the fallback logic, and the (now
+   one-option) layer switcher were removed outright rather than patched.
+
+   Caveat worth knowing: tile.openstreetmap.org's usage policy expects a
+   valid HTTP Referer. Hosted on https (GitHub Pages) browsers send one and
+   it's fine; opened straight off disk (file://) browsers send none, and OSM
+   may serve blocked/placeholder tiles to such requests. */
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Routes: MTA NYCT GTFS 2023'
-});
-
-const light = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, subdomains: 'abcd',
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a> | Routes: MTA NYCT GTFS 2023'
-});
-
-/* CARTO is the default, not tile.openstreetmap.org. The OSM tile host is a
-   common casualty of ad blockers, DNS-level filters (Pi-hole and similar),
-   and corporate proxies -- it enforces a strict usage policy and shows up on
-   several public blocklists as a result. That is silent to this page: tiles
-   just never arrive, and a first-time viewer has no way to know a working
-   alternative exists one click away in the layer switcher.
-
-   The listener below makes that recovery automatic. It only fires for the
-   layer currently on the map, counts real failures (not the handful of
-   edge-of-world tiles above zoom that legitimately 404), and switches once --
-   never bounces back, so a viewer whose network blocks the *other* host isn't
-   pinged back and forth. */
-light.addTo(map);
-
-function attachAutoFallback(primary, fallback, primaryName, fallbackName) {
-  let failures = 0, switched = false;
-  primary.on('tileerror', () => {
-    if (switched || !map.hasLayer(primary)) return;
-    if (++failures < 6) return;
-    switched = true;
-    map.removeLayer(primary);
-    fallback.addTo(map);
-    console.warn(`${primaryName} tiles failed to load (blocked by an ad blocker, `
-      + `DNS filter, or network policy) -- switched to ${fallbackName}.`);
-  });
-}
-attachAutoFallback(light, osm, 'CARTO', 'OpenStreetMap');
-attachAutoFallback(osm, light, 'OpenStreetMap', 'CARTO');
-
-L.control.layers({ 'Light (CARTO)': light, 'OpenStreetMap': osm }, null, { position: 'topright' }).addTo(map);
+}).addTo(map);
 
 /* ---------------- group features by route ---------------- */
 /* B6 renders green instead of MTA's official red (#EE352E) -- shared with
